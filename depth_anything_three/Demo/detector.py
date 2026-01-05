@@ -1,9 +1,10 @@
 import sys
 sys.path.append('../camera-control')
+sys.path.append('../da3')
 
 import os
-import numpy as np
-import open3d as o3d
+
+from src.depth_anything_3.utils.export.glb import export_to_glb
 
 from depth_anything_three.Module.detector import Detector
 
@@ -19,8 +20,11 @@ def demo():
 
     prediction = detector.detectRenderDataFile(render_data_file_path, use_ray_pose)
 
-    points = detector.visPrediction(prediction)
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(points.cpu().numpy().astype(np.float64))
-    o3d.io.write_point_cloud(home + "/chLi/Dataset/MM/Match/nezha/da3/render_data.ply", pcd)
+    export_to_glb(
+        prediction,
+        home + "/chLi/Dataset/MM/Match/nezha/da3/",
+        filter_white_bg=True,
+        conf_thresh_percentile=90,
+        ensure_thresh_percentile=90,
+    )
     return True

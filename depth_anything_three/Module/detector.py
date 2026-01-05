@@ -5,8 +5,6 @@ from typing import Optional
 
 from depth_anything_3.api import DepthAnything3
 
-from camera_control.Module.camera import Camera
-
 
 class Detector(object):
     def __init__(
@@ -84,60 +82,3 @@ class Detector(object):
         render_data_dict = np.load(render_data_file_path, allow_pickle=True).item()
 
         return self.detectRenderData(render_data_dict, use_ray_pose)
-
-    @torch.no_grad()
-    def visPrediction(
-        self,
-        prediction: dict,
-        conf_min: float = 0.5,
-    ) -> dict:
-        height, width = prediction.processed_images.shape[1:3]
-
-        points_list = []
-
-        for i in range(prediction.depth.shape[0]):
-            depth = prediction.depth[i]  # [H, W]
-            conf = prediction.conf[i]    # [H, W]
-            extrinsic = prediction.extrinsics[i]  # [3, 4]
-            intrinsic = prediction.intrinsics[i]  # [3, 3]
-
-            # 创建相机对象
-            camera = Camera(
-                width=width,
-                height=height,
-                fx=intrinsic[0][0],
-                fy=intrinsic[1][1],
-                cx=intrinsic[0][2],
-                cy=intrinsic[1][2],
-            )
-
-            world2camera_cv = np.eye(4, dtype=extrinsic.dtype)
-            world2camera_cv[:3, :] = extrinsic
-            camera.setWorld2CameraByWorld2CameraCV(world2camera_cv)
-
-            # 根据置信度阈值筛选
-            valid_mask = conf >= conf_min  # [H, W]
-
-            # 获取有效像素的索引
-            valid_indices = np.where(valid_mask)  # (row_indices, col_indices)
-            v_indices = valid_indices[0]  # 行索引（对应v）
-            u_indices = valid_indices[1]  # 列索引（对应u）
-
-            # 获取筛选后的深度和置信度
-            valid_depth = depth[valid_mask]  # [N_valid]
-
-            # 生成UV坐标（归一化到[0, 1]）
-            # UV坐标系：原点在左下角(0,0)，u向右，v向上
-            u_normalized = u_indices / width   # [N_valid]
-            v_normalized = v_indices / height  # [N_valid]
-            uv = np.stack([u_normalized, v_normalized], axis=-1)  # [N_valid, 2]
-
-            # 使用projectUV2Points将UV和深度转换为世界坐标系的点
-            points = camera.projectUV2Points(uv, valid_depth)  # [N_valid, 3]
-
-            print(points.shape)
-            points_list.append(points)
-
-        points = torch.cat(points_list, dim=0)
-
-        return points
