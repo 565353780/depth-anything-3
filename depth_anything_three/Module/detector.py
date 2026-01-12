@@ -1,9 +1,11 @@
 import os
 import torch
 import numpy as np
-from typing import Optional
+from typing import Optional, Union, List
 
-from depth_anything_3.api import DepthAnything3
+from camera_control.Module.rgbd_camera import RGBDCamera
+
+from depth_anything_3.api import DepthAnything3, Prediction
 
 
 class Detector(object):
@@ -43,8 +45,8 @@ class Detector(object):
         images: torch.Tensor,
         extrinsics: Optional[np.ndarray]=None,
         intrinsics: Optional[np.ndarray]=None,
-        use_ray_pose: bool = False,
-    ) -> dict:
+        use_ray_pose: bool=False,
+    ) -> Prediction:
         prediction = self.model.inference(
             image=images,
             extrinsics=extrinsics,
@@ -58,21 +60,37 @@ class Detector(object):
         self,
         render_data_dict: dict,
         use_ray_pose: bool = False,
-    ) -> dict:
+        return_dict: bool=False,
+    ) -> Optional[Union[List[RGBDCamera], Prediction]]:
         images = render_data_dict['images']
         extrinsics = render_data_dict['extrinsics']
         intrinsics = render_data_dict['intrinsics']
 
         image_list = [image for image in images]
 
-        return self.detect(image_list, extrinsics, intrinsics, use_ray_pose)
+        prediction = self.detect(image_list, extrinsics, intrinsics, use_ray_pose)
+
+        if return_dict:
+            return prediction
+
+        camera_list = []
+
+        for i in range(images.shape[0]):
+            camera = RGBDCamera.fromDA3Pose(prediction.extrinsics[i], prediction.intrinsics[i])
+
+            camera.loadImage((prediction.processed_images[i].astype(np.float64) / 255.0)[..., ::-1])
+            camera.loadDepth(prediction.depth[i], prediction.conf[i])
+
+            camera_list.append(camera)
+        return camera_list
 
     @torch.no_grad()
     def detectRenderDataFile(
         self,
         render_data_file_path: str,
         use_ray_pose: bool = False,
-    ) -> Optional[dict]:
+        return_dict: bool=False,
+    ) -> Optional[Union[List[RGBDCamera], Prediction]]:
         if not os.path.exists(render_data_file_path):
             print('[ERROR][Detector::detectRenderDataFile]')
             print('\t render data file not exist!')
@@ -81,4 +99,4 @@ class Detector(object):
 
         render_data_dict = np.load(render_data_file_path, allow_pickle=True).item()
 
-        return self.detectRenderData(render_data_dict, use_ray_pose)
+        return self.detectRenderData(render_data_dict, use_ray_pose, return_dict)
