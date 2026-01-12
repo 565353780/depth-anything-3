@@ -3,7 +3,7 @@ sys.path.append('../../MATCH/camera-control')
 
 import os
 
-from src.depth_anything_3.utils.export.glb import export_to_glb
+from depth_anything_3.utils.export.glb import export_to_glb
 
 from depth_anything_three.Module.detector import Detector
 
