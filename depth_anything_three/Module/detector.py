@@ -3,7 +3,7 @@ import torch
 import numpy as np
 from typing import Optional, Union, List
 
-from camera_control.Module.rgbd_camera import RGBDCamera
+from camera_control.Module.camera import Camera
 
 from depth_anything_3.api import DepthAnything3, Prediction
 
@@ -61,7 +61,7 @@ class Detector(object):
         render_data_dict: dict,
         use_ray_pose: bool = False,
         return_dict: bool=False,
-    ) -> Optional[Union[List[RGBDCamera], Prediction]]:
+    ) -> Optional[Union[List[Camera], Prediction]]:
         images = render_data_dict['images']
         extrinsics = render_data_dict['extrinsics']
         intrinsics = render_data_dict['intrinsics']
@@ -84,7 +84,7 @@ class Detector(object):
         camera_list = []
 
         for i in range(images.shape[0]):
-            camera = RGBDCamera.fromDA3Pose(pred_extrinsics[i], prediction.intrinsics[i])
+            camera = Camera.fromDA3Pose(pred_extrinsics[i], prediction.intrinsics[i])
 
             camera.loadImage((prediction.processed_images[i].astype(np.float64) / 255.0)[..., ::-1])
             camera.loadDepth(prediction.depth[i], prediction.conf[i])
@@ -98,7 +98,7 @@ class Detector(object):
         render_data_file_path: str,
         use_ray_pose: bool = False,
         return_dict: bool=False,
-    ) -> Optional[Union[List[RGBDCamera], Prediction]]:
+    ) -> Optional[Union[List[Camera], Prediction]]:
         if not os.path.exists(render_data_file_path):
             print('[ERROR][Detector::detectRenderDataFile]')
             print('\t render data file not exist!')
