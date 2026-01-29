@@ -104,7 +104,7 @@ class Detector(object):
         extrinsics = []
         intrinsics = []
 
-        for camera in range(camera_list):
+        for camera in camera_list:
             image = camera.image_cv
             extrinsic = toNumpy(camera.world2cameraCV, np.float32)
             intrinsic = toNumpy(camera.intrinsic, np.float32)
