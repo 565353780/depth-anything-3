@@ -75,7 +75,7 @@ class Detector(object):
             return prediction
 
         extrinsic_44_list = []
-        for i in range(images.shape[0]):
+        for i in range(len(images)):
             extrinsic_44 = np.zeros((4, 4), dtype=prediction.extrinsics.dtype)
             extrinsic_44[:3, :4] = prediction.extrinsics[i]
             extrinsic_44[3, :] = np.array([0, 0, 0, 1], dtype=prediction.extrinsics.dtype)
@@ -84,7 +84,7 @@ class Detector(object):
 
         camera_list = []
 
-        for i in range(images.shape[0]):
+        for i in range(len(images)):
             camera = Camera.fromDA3Pose(pred_extrinsics[i], prediction.intrinsics[i])
 
             camera.loadImage((prediction.processed_images[i].astype(np.float64) / 255.0)[..., ::-1])
