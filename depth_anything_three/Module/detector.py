@@ -3,6 +3,7 @@ import torch
 import numpy as np
 from typing import Optional, Union, List
 
+from camera_control.Method.data import toNumpy
 from camera_control.Module.camera import Camera
 
 from depth_anything_3.api import DepthAnything3, Prediction
@@ -91,6 +92,34 @@ class Detector(object):
 
             camera_list.append(camera)
         return camera_list
+
+    @torch.no_grad()
+    def detectCameras(
+        self,
+        camera_list: List[Camera],
+        use_ray_pose: bool = False,
+        return_dict: bool=False,
+    ) -> Optional[Union[List[Camera], Prediction]]:
+        images = []
+        extrinsics = []
+        intrinsics = []
+
+        for camera in range(camera_list):
+            image = camera.image_cv
+            extrinsic = toNumpy(camera.world2cameraCV, np.float32)
+            intrinsic = toNumpy(camera.intrinsic, np.float32)
+
+            images.append(image)
+            extrinsics.append(extrinsic)
+            intrinsics.append(intrinsic)
+
+        render_data = {
+            'images': images,
+            'extrinsics': extrinsics,
+            'intrinsics': intrinsics,
+        }
+
+        return self.detectRenderData(render_data, use_ray_pose, return_dict)
 
     @torch.no_grad()
     def detectRenderDataFile(
