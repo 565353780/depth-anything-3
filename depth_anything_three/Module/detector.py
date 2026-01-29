@@ -1,6 +1,8 @@
 import os
 import torch
 import numpy as np
+
+from copy import deepcopy
 from typing import Optional, Union, List
 
 from camera_control.Method.data import toNumpy
@@ -129,9 +131,10 @@ class Detector(object):
         if return_dict:
             return result
 
-        for i in range(len(camera_list)):
-            camera_list[i].loadDepth(result[i].depth, result[i].conf)
-        return camera_list
+        pred_camera_list = deepcopy(camera_list)
+        for i in range(len(pred_camera_list)):
+            pred_camera_list[i].loadDepth(result[i].depth, result[i].conf)
+        return pred_camera_list
 
     @torch.no_grad()
     def detectRenderDataFile(
