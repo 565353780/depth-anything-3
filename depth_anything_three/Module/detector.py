@@ -119,7 +119,19 @@ class Detector(object):
             'intrinsics': intrinsics,
         }
 
-        return self.detectRenderData(render_data, use_ray_pose, return_dict)
+        result = self.detectRenderData(render_data, use_ray_pose, return_dict)
+
+        if result is None:
+            print('[ERROR][Detector::detectCameras]')
+            print('\t detectRenderData failed!')
+            return None
+
+        if return_dict:
+            return result
+
+        for i in range(len(camera_list)):
+            camera_list[i].loadDepth(result[i].depth, result[i].conf)
+        return camera_list
 
     @torch.no_grad()
     def detectRenderDataFile(
