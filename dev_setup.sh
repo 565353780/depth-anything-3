@@ -8,7 +8,7 @@ pip install ninja pillow
 pip install gradio==5.50.0
 
 pip3 install torch torchvision \
-  --index-url https://download.pytorch.org/whl/cu128
+  --index-url https://download.pytorch.org/whl/cu124
 
 cd xformers
 git checkout v0.0.33
