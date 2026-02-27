@@ -19,10 +19,13 @@ def demo():
 
     detector = Detector(model_folder_path, device)
 
-    prediction = detector.detectRenderDataFile(render_data_file_path, use_ray_pose, return_dict=True)
+    result = detector.detectRenderDataFile(render_data_file_path, use_ray_pose, return_dict=True)
+    assert result is not None
+
+    camera_list, predictions = result
 
     export_to_glb(
-        prediction,
+        predictions,
         home + "/chLi/Dataset/pixel_align/" + shape_id + "/da3/",
         filter_white_bg=True,
         conf_thresh_percentile=90,
