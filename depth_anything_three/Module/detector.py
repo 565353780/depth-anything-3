@@ -2,8 +2,7 @@ import os
 import torch
 import numpy as np
 
-from copy import deepcopy
-from typing import Optional, Union, List
+from typing import Optional, Union, List, Tuple
 
 from camera_control.Method.data import toNumpy
 from camera_control.Module.camera import Camera
@@ -45,36 +44,17 @@ class Detector(object):
     @torch.no_grad()
     def detect(
         self,
-        images: torch.Tensor,
+        images: np.ndarray,
         extrinsics: Optional[np.ndarray]=None,
         intrinsics: Optional[np.ndarray]=None,
         use_ray_pose: bool=False,
-    ) -> Prediction:
+    ) -> Tuple[List[Camera], Prediction]:
         prediction = self.model.inference(
             image=images,
             extrinsics=extrinsics,
             intrinsics=intrinsics,
             use_ray_pose=use_ray_pose,
         )
-        return prediction
-
-    @torch.no_grad()
-    def detectRenderData(
-        self,
-        render_data_dict: dict,
-        use_ray_pose: bool = False,
-        return_dict: bool=False,
-    ) -> Optional[Union[List[Camera], Prediction]]:
-        images = render_data_dict['images']
-        extrinsics = render_data_dict['extrinsics']
-        intrinsics = render_data_dict['intrinsics']
-
-        image_list = [image for image in images]
-
-        prediction = self.detect(image_list, extrinsics, intrinsics, use_ray_pose)
-
-        if return_dict:
-            return prediction
 
         extrinsic_44_list = []
         for i in range(len(images)):
@@ -89,19 +69,18 @@ class Detector(object):
         for i in range(len(images)):
             camera = Camera.fromDA3Pose(pred_extrinsics[i], prediction.intrinsics[i])
 
-            camera.loadImage((prediction.processed_images[i].astype(np.float64) / 255.0)[..., ::-1])
+            camera.loadImage((images[i].astype(np.float64) / 255.0)[..., ::-1])
             camera.loadDepth(prediction.depth[i], prediction.conf[i])
 
             camera_list.append(camera)
-        return camera_list
+        return camera_list, prediction
 
     @torch.no_grad()
     def detectCameras(
         self,
         camera_list: List[Camera],
         use_ray_pose: bool = False,
-        return_dict: bool=False,
-    ) -> Optional[Union[List[Camera], Prediction]]:
+    ) -> Union[Tuple[List[Camera], Prediction], Tuple[None, None]]:
         images = []
         extrinsics = []
         intrinsics = []
@@ -115,40 +94,11 @@ class Detector(object):
             extrinsics.append(extrinsic)
             intrinsics.append(intrinsic)
 
-        render_data = {
-            'images': images,
-            'extrinsics': extrinsics,
-            'intrinsics': intrinsics,
-        }
+        pred_camera_list, prediction = self.detect(
+            images,
+            extrinsics,
+            intrinsics,
+            use_ray_pose,
+        )
 
-        result = self.detectRenderData(render_data, use_ray_pose, return_dict)
-
-        if result is None:
-            print('[ERROR][Detector::detectCameras]')
-            print('\t detectRenderData failed!')
-            return None
-
-        if return_dict:
-            return result
-
-        pred_camera_list = deepcopy(camera_list)
-        for i in range(len(pred_camera_list)):
-            pred_camera_list[i].loadDepth(result[i].depth, result[i].conf)
-        return pred_camera_list
-
-    @torch.no_grad()
-    def detectRenderDataFile(
-        self,
-        render_data_file_path: str,
-        use_ray_pose: bool = False,
-        return_dict: bool=False,
-    ) -> Optional[Union[List[Camera], Prediction]]:
-        if not os.path.exists(render_data_file_path):
-            print('[ERROR][Detector::detectRenderDataFile]')
-            print('\t render data file not exist!')
-            print('\t render_data_file_path:', render_data_file_path)
-            return None
-
-        render_data_dict = np.load(render_data_file_path, allow_pickle=True).item()
-
-        return self.detectRenderData(render_data_dict, use_ray_pose, return_dict)
+        return pred_camera_list, prediction
