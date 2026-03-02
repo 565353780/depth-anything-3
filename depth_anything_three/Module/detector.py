@@ -43,11 +43,20 @@ class Detector(object):
         return True
 
     @torch.no_grad()
-    def createCameras(
+    def detect(
         self,
         images: np.ndarray,
-        prediction: Prediction,
-    ) -> List[Camera]:
+        extrinsics: Optional[np.ndarray]=None,
+        intrinsics: Optional[np.ndarray]=None,
+        use_ray_pose: bool=False,
+    ) -> Tuple[List[Camera], Prediction]:
+        prediction = self.model.inference(
+            image=images,
+            extrinsics=extrinsics,
+            intrinsics=intrinsics,
+            use_ray_pose=use_ray_pose,
+        )
+
         extrinsic_44_list = []
         for i in range(len(images)):
             extrinsic_44 = np.zeros((4, 4), dtype=prediction.extrinsics.dtype)
@@ -68,24 +77,7 @@ class Detector(object):
             camera.loadDepth(prediction.depth[i], prediction.conf[i])
 
             camera_list.append(camera)
-        return camera_list
 
-    @torch.no_grad()
-    def detect(
-        self,
-        images: np.ndarray,
-        extrinsics: Optional[np.ndarray]=None,
-        intrinsics: Optional[np.ndarray]=None,
-        use_ray_pose: bool=False,
-    ) -> Tuple[List[Camera], Prediction]:
-        prediction = self.model.inference(
-            image=images,
-            extrinsics=extrinsics,
-            intrinsics=intrinsics,
-            use_ray_pose=use_ray_pose,
-        )
-
-        camera_list = self.createCameras(images, prediction)
         return camera_list, prediction
 
     @torch.no_grad()
