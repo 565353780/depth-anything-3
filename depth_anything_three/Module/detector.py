@@ -2,6 +2,7 @@ import os
 import torch
 import numpy as np
 
+from copy import deepcopy
 from typing import Optional, Union, List, Tuple
 
 from camera_control.Method.data import toNumpy
@@ -42,20 +43,11 @@ class Detector(object):
         return True
 
     @torch.no_grad()
-    def detect(
+    def createCameras(
         self,
         images: np.ndarray,
-        extrinsics: Optional[np.ndarray]=None,
-        intrinsics: Optional[np.ndarray]=None,
-        use_ray_pose: bool=False,
-    ) -> Tuple[List[Camera], Prediction]:
-        prediction = self.model.inference(
-            image=images,
-            extrinsics=extrinsics,
-            intrinsics=intrinsics,
-            use_ray_pose=use_ray_pose,
-        )
-
+        prediction: Prediction,
+    ) -> List[Camera]:
         extrinsic_44_list = []
         for i in range(len(images)):
             extrinsic_44 = np.zeros((4, 4), dtype=prediction.extrinsics.dtype)
@@ -76,6 +68,24 @@ class Detector(object):
             camera.loadDepth(prediction.depth[i], prediction.conf[i])
 
             camera_list.append(camera)
+        return camera_list
+
+    @torch.no_grad()
+    def detect(
+        self,
+        images: np.ndarray,
+        extrinsics: Optional[np.ndarray]=None,
+        intrinsics: Optional[np.ndarray]=None,
+        use_ray_pose: bool=False,
+    ) -> Tuple[List[Camera], Prediction]:
+        prediction = self.model.inference(
+            image=images,
+            extrinsics=extrinsics,
+            intrinsics=intrinsics,
+            use_ray_pose=use_ray_pose,
+        )
+
+        camera_list = self.createCameras(images, prediction)
         return camera_list, prediction
 
     @torch.no_grad()
@@ -104,4 +114,8 @@ class Detector(object):
             use_ray_pose,
         )
 
-        return pred_camera_list, prediction
+        final_camera_list = deepcopy(camera_list)
+        for i in range(len(final_camera_list)):
+            final_camera_list[i].loadDepth(pred_camera_list[i].depth, pred_camera_list[i].conf)
+
+        return final_camera_list, prediction
