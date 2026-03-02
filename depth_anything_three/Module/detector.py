@@ -67,7 +67,10 @@ class Detector(object):
         camera_list = []
 
         for i in range(len(images)):
-            camera = Camera.fromDA3Pose(pred_extrinsics[i], prediction.intrinsics[i])
+            if intrinsics is not None:
+                camera = Camera.fromDA3Pose(pred_extrinsics[i], intrinsics[i])
+            else:
+                camera = Camera.fromDA3Pose(pred_extrinsics[i], prediction.intrinsics[i])
 
             camera.loadImage((images[i].astype(np.float64) / 255.0)[..., ::-1])
             camera.loadDepth(prediction.depth[i], prediction.conf[i])
