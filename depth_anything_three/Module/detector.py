@@ -70,6 +70,9 @@ class Detector(object):
 
         self.model = DepthAnything3.from_pretrained(model_folder_path)
         self.model = self.model.to(device='cpu')
+
+        print('[INFO][Detector::loadModel]')
+        print('\t model loaded from:', model_folder_path)
         return True
 
     def _toGPU(self) -> None:
