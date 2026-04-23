@@ -1,3 +1,4 @@
+import gc
 import os
 import torch
 import numpy as np
@@ -9,6 +10,35 @@ from camera_control.Method.data import toNumpy
 from camera_control.Module.camera import Camera
 
 from depth_anything_3.api import DepthAnything3, Prediction
+
+
+def _tensorToCPU(value):
+    if isinstance(value, torch.Tensor):
+        return value.detach().cpu()
+    if isinstance(value, (list, tuple)):
+        converted = [_tensorToCPU(v) for v in value]
+        return type(value)(converted)
+    if isinstance(value, dict):
+        return {k: _tensorToCPU(v) for k, v in value.items()}
+    return value
+
+
+def _predictionToCPU(prediction: Prediction) -> Prediction:
+    for name in (
+        'depth', 'sky', 'conf', 'extrinsics', 'intrinsics',
+        'processed_images',
+    ):
+        if not hasattr(prediction, name):
+            continue
+        setattr(prediction, name, _tensorToCPU(getattr(prediction, name)))
+    if getattr(prediction, 'gaussians', None) is not None:
+        g = prediction.gaussians
+        for name in ('means', 'scales', 'rotations', 'harmonics', 'opacities'):
+            if hasattr(g, name):
+                setattr(g, name, _tensorToCPU(getattr(g, name)))
+    if getattr(prediction, 'aux', None) is not None:
+        prediction.aux = _tensorToCPU(prediction.aux)
+    return prediction
 
 
 class Detector(object):
@@ -39,8 +69,21 @@ class Detector(object):
         self.device = device
 
         self.model = DepthAnything3.from_pretrained(model_folder_path)
-        self.model = self.model.to(device=device)
+        self.model = self.model.to(device='cpu')
         return True
+
+    def _toGPU(self) -> None:
+        if self.model is not None:
+            self.model.to(device=self.device)
+        return
+
+    def _toCPU(self) -> None:
+        if self.model is not None:
+            self.model.to(device='cpu')
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        return
 
     @torch.no_grad()
     def detect(
@@ -50,35 +93,41 @@ class Detector(object):
         intrinsics: Optional[np.ndarray]=None,
         use_ray_pose: bool=False,
     ) -> Tuple[List[Camera], Prediction]:
-        prediction = self.model.inference(
-            image=images,
-            extrinsics=extrinsics,
-            intrinsics=intrinsics,
-            use_ray_pose=use_ray_pose,
-        )
+        self._toGPU()
+        try:
+            prediction = self.model.inference(
+                image=images,
+                extrinsics=extrinsics,
+                intrinsics=intrinsics,
+                use_ray_pose=use_ray_pose,
+            )
 
-        extrinsic_44_list = []
-        for i in range(len(images)):
-            extrinsic_44 = np.zeros((4, 4), dtype=prediction.extrinsics.dtype)
-            extrinsic_44[:3, :4] = prediction.extrinsics[i]
-            extrinsic_44[3, :] = np.array([0, 0, 0, 1], dtype=prediction.extrinsics.dtype)
-            extrinsic_44_list.append(extrinsic_44)
-        pred_extrinsics = extrinsic_44_list
+            prediction = _predictionToCPU(prediction)
 
-        camera_list = []
+            extrinsic_44_list = []
+            for i in range(len(images)):
+                extrinsic_44 = np.zeros((4, 4), dtype=prediction.extrinsics.dtype)
+                extrinsic_44[:3, :4] = prediction.extrinsics[i]
+                extrinsic_44[3, :] = np.array([0, 0, 0, 1], dtype=prediction.extrinsics.dtype)
+                extrinsic_44_list.append(extrinsic_44)
+            pred_extrinsics = extrinsic_44_list
 
-        for i in range(len(images)):
-            if intrinsics is not None:
-                camera = Camera.fromDA3Pose(pred_extrinsics[i], intrinsics[i])
-            else:
-                camera = Camera.fromDA3Pose(pred_extrinsics[i], prediction.intrinsics[i])
+            camera_list = []
 
-            camera.loadImage((images[i].astype(np.float64) / 255.0)[..., ::-1])
-            camera.loadDepth(prediction.depth[i], prediction.conf[i])
+            for i in range(len(images)):
+                if intrinsics is not None:
+                    camera = Camera.fromDA3Pose(pred_extrinsics[i], intrinsics[i])
+                else:
+                    camera = Camera.fromDA3Pose(pred_extrinsics[i], prediction.intrinsics[i])
 
-            camera_list.append(camera)
+                camera.loadImage((images[i].astype(np.float64) / 255.0)[..., ::-1])
+                camera.loadDepth(prediction.depth[i], prediction.conf[i])
 
-        return camera_list, prediction
+                camera_list.append(camera)
+
+            return camera_list, prediction
+        finally:
+            self._toCPU()
 
     @torch.no_grad()
     def detectCameras(
@@ -91,7 +140,7 @@ class Detector(object):
         intrinsics = []
 
         for camera in camera_list:
-            image = camera.image_cv
+            image = camera.toImageVisCV(use_mask=False)
             extrinsic = toNumpy(camera.world2cameraCV, np.float32)
             intrinsic = toNumpy(camera.intrinsic, np.float32)
 
@@ -108,6 +157,16 @@ class Detector(object):
 
         final_camera_list = deepcopy(camera_list)
         for i in range(len(final_camera_list)):
-            final_camera_list[i].loadDepth(pred_camera_list[i].depth, pred_camera_list[i].conf)
+            pred_depth = pred_camera_list[i].depth
+            pred_conf = pred_camera_list[i].conf
+            if isinstance(pred_depth, torch.Tensor):
+                pred_depth = pred_depth.detach().cpu()
+            if isinstance(pred_conf, torch.Tensor):
+                pred_conf = pred_conf.detach().cpu()
+            final_camera_list[i].loadDepth(pred_depth, pred_conf)
+
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
         return final_camera_list, prediction
